@@ -88,7 +88,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     uint256 public price;
 
     address[] public specialTokens;
-
+    mapping (address => uint24 ) public specialTokentoFee;
     IEntropy private entropy;
     address private entropyProvider;
 
@@ -169,18 +169,20 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     }
 
 function _wrapAndSwap(address recipient, uint256 amountIn) internal {
-    
     WETH.deposit{value: amountIn}();
     SafeTransferLib.safeApprove(address(WETH), address(swapRouter), amountIn);
 
     uint256 amountPerToken = amountIn / specialTokens.length;
 
     for (uint256 i = 0; i < specialTokens.length; i++) {
+        address specialToken = specialTokens[i];
+        uint24 fee = specialTokentoFee[specialToken];
+        
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: address(WETH),
-                tokenOut: specialTokens[i],
-                fee: 3000,
+                tokenOut: specialToken,
+                fee: fee, 
                 recipient: recipient,
                 amountIn: amountPerToken,
                 amountOutMinimum: 0,
@@ -304,13 +306,14 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
         return address(entropy);
     }
 
-    function addSpecialTokens(address speciality) external payable onlyOwner {
+    function addSpecialTokens(address speciality, uint24 fee) external payable onlyOwner {
         uint256 length = specialTokens.length;
         for (uint256 i; i < length;) {
             if (specialTokens[i] == speciality) revert TokenAlreadySpecial();
             unchecked { ++i; }
         }
         specialTokens.push(speciality);
+        specialTokentoFee[speciality] = fee;
     }
 
     function setSigner(address value) external onlyOwner {
