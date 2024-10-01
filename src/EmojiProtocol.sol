@@ -96,21 +96,18 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     event SpinResult(uint64 sequenceNumber, uint8 slot1, uint8 slot2, uint8 slot3);
 
     mapping(uint64 => address) public spinToSpinner;
-
-    mapping(address => address) public DiscountTokens;
-    mapping(bytes32 => address) public Spins;
+    mapping(address => address) public DiscountTokens;//special tokens????g8keep etc?
 
     bytes32 private constant REGISTER_TYPEHASH = 
         keccak256("Info(string telegramId,address walletAddress)");
 
     mapping(address => string) public registeredUsers;
-    mapping(string => address) public userAddresses; // New mapping to get address from telegramId
+    mapping(string => address) public userAddresses;
 
     struct Info {
         string telegramId;
         address walletAddress;
     }
-
     IChip public chip;
 
 
@@ -219,8 +216,6 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
 
     }
 
-
-    
 
    function requestSpin(bytes32 userRandomNumber, string calldata telegramId) external payable onlyOwner {
         address spinner = userAddresses[telegramId];
