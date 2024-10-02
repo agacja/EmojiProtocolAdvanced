@@ -30,7 +30,9 @@ contract Chip is ERC1155, Ownable {
     }
 
     uint8 public saleState;
+    uint16 public spinFee;
     bool public baseURILocked;
+    
 
     address private _baseURI;
     address public emojiProtocolAddress;
@@ -45,11 +47,7 @@ contract Chip is ERC1155, Ownable {
     event TokenURIUpdated(uint256 indexed tokenId, string newUri);
     event BaseURIUpdated(string newBaseURI);
 
-    modifier mintable(uint256 tokenId, uint256 amount) {
-        if (!_tokenIds.contains(tokenId)) revert InvalidTokenId();
-        if (msg.value < FPML.fullMulDiv(amount, tokenData[tokenId].price, 1)) revert InsufficientPayment();
-        _;
-    }
+
 
     constructor() ERC1155() {
         _initializeOwner(msg.sender);
@@ -69,9 +67,14 @@ contract Chip is ERC1155, Ownable {
         emojiProtocolAddress = _emojiProtocolAddress;
     }
 
-    function mintFromEmojiProtocol(address to, uint256 tokenId, uint256 quantity) external payable mintable(tokenId, quantity) {
+    function mintFromEmojiProtocol(address to, uint256 tokenId, uint256 quantity) external payable  {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
         if (saleState == 0) revert SaleClosed();
+        if (!_tokenIds.contains(tokenId)) revert InvalidTokenId();
+        uint256 totalPrice = FPML.fullMulDiv(quantity, tokenData[tokenId].price, 1);
+        uint256 spinFeeAmount = FPML.fullMulDiv(totalPrice, spinFee, 10000);
+        if (msg.value < totalPrice) revert InsufficientPayment();
+        payable(emojiProtocolAddress).safeTransferETH(spinFeeAmount);
         _mint(to, tokenId, quantity, "");
         _ownerTokenIds[to].add(tokenId);
     }
@@ -97,6 +100,7 @@ contract Chip is ERC1155, Ownable {
     function setSaleState(uint8 value) external onlyOwner {
         saleState = value;
     }
+   
 
     function createToken(uint256 tokenId, string memory tokenURI, uint96 price) external onlyOwner {
         if (_tokenIds.contains(tokenId)) revert Exists();
@@ -124,9 +128,13 @@ contract Chip is ERC1155, Ownable {
     function getTokenIds() external view returns (uint256[] memory) {
         return _tokenIds.values();
     }
-//wołaj to 
+
     function getPrice(uint256 tokenId) external view returns (uint96) {
         return tokenData[tokenId].price;
+    }
+
+   function setSpinFee(uint16 fee) external onlyOwner{
+        spinFee = fee;
     }
 
     //I THINK THIS ONE IS BETTER BECAUSE WE JUST SAY THAT LOWER TOKEN ID THE PRICE IS LOWER SO....

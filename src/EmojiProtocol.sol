@@ -81,12 +81,10 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     ISwapRouter public swapRouter;
     IERC20 public MOG_COIN;
     IWETH public WETH;
-    uint256 public PLATFORM_FEE = 1e15; // 0.001 native token
-    uint256 public BETTER_PLATFORM_FEE = 1e20;
     uint256 public constant ERC20_FEE_DISCOUNT = 50;
-    uint256 public SPIN_PRICE;
+    
     uint256 public price;
-
+   
     address[] public specialTokens;
     mapping (address => uint24 ) public specialTokentoFee;
     IEntropy private entropy;
@@ -137,8 +135,6 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
 
     function initialize(address _swapRouter, address _mogCoin, address _weth) external onlyOwner {
         swapRouter = ISwapRouter(_swapRouter);
-        //add bret, and other major coins
-        MOG_COIN = IERC20(_mogCoin);
         WETH = IWETH(_weth);
     }
 //setting it here in case of some problems
@@ -208,10 +204,10 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
     }
 
     function buySpins(uint256 amount, uint256 tokenId) external payable {
-        if (msg.value != price * amount || bytes(registeredUsers[msg.sender]).length == 0) {
+       
+        if (bytes(registeredUsers[msg.sender]).length == 0) {
             revert UserNotRegisteredOrInsufficientPayment();
         }
-      
         chip.mintFromEmojiProtocol(msg.sender, amount,tokenId);
 
     }
@@ -301,6 +297,7 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
         return address(entropy);
     }
 
+
     function addSpecialTokens(address speciality, uint24 fee) external payable onlyOwner {
         uint256 length = specialTokens.length;
         for (uint256 i; i < length;) {
@@ -311,15 +308,26 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
         specialTokentoFee[speciality] = fee;
     }
 
+     function removeSpecialTokens(address speciality) external payable onlyOwner {
+        uint256 length = specialTokens.length;
+        for (uint256 i; i < length; i++) {
+            if (specialTokens[i] == speciality) {
+                specialTokens[i] = specialTokens[length - 1];
+                specialTokens.pop();
+        
+                delete specialTokentoFee[speciality];
+                return;
+            }
+        }
+        revert TokenNotFound();
+    }
+
+
     function setSigner(address value) external onlyOwner {
         signer = value;
     }
 
-    function setSpinPrice(uint256 _price) external onlyOwner {
-        if (_price > 1e15) revert not();
-        SPIN_PRICE = _price;
-    }
-
+   
     receive() external payable {
         if (block.chainid == 1) {
             bridgeAndSwapFromEthereum();
