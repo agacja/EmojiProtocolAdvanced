@@ -32,15 +32,12 @@ contract Chip is ERC1155, Ownable {
     uint8 public saleState;
     uint16 public spinFee;
     bool public baseURILocked;
-    
+    EnumerableSetLib.Uint256Set private _tokenIds;
 
     address private _baseURI;
     address public emojiProtocolAddress;
 
     mapping(uint256 => TokenData) public tokenData;
-    EnumerableSetLib.Uint256Set private _tokenIds;
-
-
     mapping(address => EnumerableSetLib.Uint256Set) private _ownerTokenIds;
 
     event TokenCreated(uint256 indexed tokenId, uint96 price);
@@ -137,9 +134,6 @@ contract Chip is ERC1155, Ownable {
         spinFee = fee;
     }
 
-    //I THINK THIS ONE IS BETTER BECAUSE WE JUST SAY THAT LOWER TOKEN ID THE PRICE IS LOWER SO....
-    //THERE IS NO NEED TO READ FOR THE STORAGE FOR THE PRICE OF EVERY TOKEN JUST THIS ONE RETURNED
-
 
 
 function getOwnerTokens(address owner) external view returns (uint256) {
@@ -157,7 +151,6 @@ function getOwnerTokens(address owner) external view returns (uint256) {
     return lowestTokenId;
 }
 
-//function getPriceoftoken
     function withdraw(uint96 money) external {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
         SafeTransferLib.safeTransferETH(payable(emojiProtocolAddress), money);

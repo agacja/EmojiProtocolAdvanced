@@ -14,21 +14,12 @@ import {EIP712} from "../lib/solady/src/utils/EIP712.sol";
 error NotEthereum();
 error NoMoney();
 error InsufficientFee();
-error FeeTransferFailed();
-error NotSpecialToken();
-error InsufficientTokenBalance();
-error TokenTransferFailed();
-error ups();
 error fuck();
-error RefundFailed();
-error IncorrectETHAmount();
-error InsufficientSpins();
-error not();
-error InsufficientNFTs();
 error InvalidTelegramId();
 error UserNotRegisteredOrInsufficientPayment();
 error TokenAlreadySpecial();
 error dupa();
+error TokenNotFound();
 
 interface ISwapRouter {
     struct ExactInputSingleParams {
@@ -79,26 +70,23 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     address public signer;
 
     ISwapRouter public swapRouter;
-    IERC20 public MOG_COIN;
     IWETH public WETH;
-    uint256 public constant ERC20_FEE_DISCOUNT = 50;
     
-    uint256 public price;
    
     address[] public specialTokens;
-    mapping (address => uint24 ) public specialTokentoFee;
+
     IEntropy private entropy;
     address private entropyProvider;
 
     event SpinRequest(uint64 sequenceNumber, address spinner);
     event SpinResult(uint64 sequenceNumber, uint8 slot1, uint8 slot2, uint8 slot3);
 
-    mapping(uint64 => address) public spinToSpinner;
-    mapping(address => address) public DiscountTokens;//special tokens????g8keep etc?
+
 
     bytes32 private constant REGISTER_TYPEHASH = 
         keccak256("Info(string telegramId,address walletAddress)");
-
+    mapping(uint64 => address) public spinToSpinner;
+    mapping (address => uint24 ) public specialTokentoFee;
     mapping(address => string) public registeredUsers;
     mapping(string => address) public userAddresses;
 
@@ -133,11 +121,11 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         _;
     }
 
-    function initialize(address _swapRouter, address _mogCoin, address _weth) external onlyOwner {
+    function initialize(address _swapRouter, address _weth) external onlyOwner {
         swapRouter = ISwapRouter(_swapRouter);
         WETH = IWETH(_weth);
     }
-//setting it here in case of some problems
+
     function setChipAddress(address _chipAddress) external onlyOwner {
         chip = IChip(_chipAddress);
     }
@@ -272,14 +260,16 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
         emit SpinResult(sequenceNumber, slot1, slot2, slot3);
     }
 
-    function _processWin(address recipient, uint256 winPercentage) internal {
+     function _processWin(address recipient, uint256 winPercentage) internal {
         uint256 length = specialTokens.length;
         
         for (uint256 i; i < length;) {
             address token = specialTokens[i];
             uint256 balance = IERC20(token).balanceOf(address(this));
-            uint256 winAmount = (balance * winPercentage) / 10000;
-            uint256 feeAmount = (winAmount * 500) / 10000; // 5% fee
+        
+            uint256 winAmount = FPML.fullMulDiv(balance, winPercentage, 10000);
+            
+            uint256 feeAmount = FPML.fullMulDiv(winAmount, 500, 10000); // 5% fee
             uint256 recipientAmount = winAmount - feeAmount;
 
             if (recipientAmount > 0) {
