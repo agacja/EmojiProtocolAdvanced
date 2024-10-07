@@ -13,7 +13,7 @@ contract Deploy is Script, CreateXScript {
         vm.startBroadcast();
 
         address deployer = msg.sender;
-        bytes32 salt = bytes32(0x644c1564d1d19cf336417734170f21b94410907400645f724608bb4f0006204d);
+        bytes32 salt = bytes32(0x644c1564d1d19cf336417734170f21b94410907400645f999608bb4f0006204d);
 
         // Calculate the predetermined address of the Counter contract deployment
         address computedAddress = computeCreate3Address(salt, deployer);
@@ -33,12 +33,11 @@ contract Deploy is Script, CreateXScript {
         EmojiProtocol emojiProtocol = EmojiProtocol(payable(deployedAddress));
 
         // // base
-        // emojiProtocol.initialize(
-        //     0x2626664c2603336E57B271c5C0b26F421741e481,
-        //     0x2Da56AcB9Ea78330f947bD57C54119Debda7AF71,
-        //     0x4200000000000000000000000000000000000006
-        //
-        // );
+         emojiProtocol.initialize(
+             0x2626664c2603336E57B271c5C0b26F421741e481,
+           0x4200000000000000000000000000000000000006
+        
+         );
         
         // // eth
         // emojiProtocol.initialize(

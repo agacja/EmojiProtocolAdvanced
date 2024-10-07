@@ -59,8 +59,10 @@ interface IChip {
     function withdraw(uint96 money) external;
     function getOwnerTokens(address owner) external view returns (uint256);
     function getPrice(uint256 tokenId) external view returns (uint96);
-    
+    function getspinFee() external view returns (uint16);  
 }
+    
+
 
 contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     using ECDSA for bytes32;
@@ -221,7 +223,7 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
         spinToSpinner[sequenceNumber] = spinner;
     }
 
-    function getSpinFee() public view returns (uint256) {
+    function getEntropyFee() public view returns (uint256) {
         return entropy.getFee(entropyProvider);
     }
 
@@ -236,11 +238,13 @@ function _wrapAndSwap(address recipient, uint256 amountIn) internal {
         uint8 slot3 = uint8((randomValue >> 4) % 4);
         uint8 hugoCheck = uint8((randomValue >> 6) % 10);
 
-        address spinner = spinToSpinner[sequenceNumber];
-        uint256 lowestTokenId = chip.getOwnerTokens(spinner);
-        uint96 money = chip.getPrice(lowestTokenId);
-        chip.burn(spinner,lowestTokenId, 1);
-        chip.withdraw(money);
+address spinner = spinToSpinner[sequenceNumber];
+uint256 lowestTokenId = chip.getOwnerTokens(spinner);
+uint96 money = chip.getPrice(lowestTokenId);
+uint96 total = money - uint96(FPML.fullMulDiv(money, chip.getspinFee(), 10000));
+
+chip.burn(spinner, lowestTokenId, 1);
+chip.withdraw(total);
 
         
         if (slot1 == slot2 && slot2 == slot3) {

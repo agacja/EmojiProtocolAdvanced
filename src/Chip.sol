@@ -125,6 +125,9 @@ contract Chip is ERC1155, Ownable {
     function getTokenIds() external view returns (uint256[] memory) {
         return _tokenIds.values();
     }
+ function getspinFee() external view returns (uint16) {
+        return spinFee;
+    }
 
     function getPrice(uint256 tokenId) external view returns (uint96) {
         return tokenData[tokenId].price;
