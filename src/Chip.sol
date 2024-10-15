@@ -18,7 +18,6 @@ error Exists();
 error DoesntExist();
 error noTokens();
 
-
 contract Chip is ERC1155, Ownable {
     using EnumerableSetLib for EnumerableSetLib.Uint256Set;
     using SafeTransferLib for address payable;
@@ -44,8 +43,6 @@ contract Chip is ERC1155, Ownable {
     event TokenURIUpdated(uint256 indexed tokenId, string newUri);
     event BaseURIUpdated(string newBaseURI);
 
-
-
     constructor() ERC1155() {
         _initializeOwner(msg.sender);
     }
@@ -54,24 +51,38 @@ contract Chip is ERC1155, Ownable {
         if (!_tokenIds.contains(tokenId)) revert DoesntExist();
         address tokenURI = tokenData[tokenId].uri;
         if (tokenURI == address(0)) {
-            return string(abi.encodePacked(SSTORE2.read(_baseURI), tokenId.toString()));
+            return
+                string(
+                    abi.encodePacked(SSTORE2.read(_baseURI), tokenId.toString())
+                );
         } else {
             return string(SSTORE2.read(tokenURI));
         }
     }
 
-    function setEmojiProtocolAddress(address _emojiProtocolAddress) external onlyOwner {
+    function setEmojiProtocolAddress(
+        address _emojiProtocolAddress
+    ) external onlyOwner {
         emojiProtocolAddress = _emojiProtocolAddress;
     }
 
-    function mintFromEmojiProtocol(address to, uint256 tokenId, uint256 quantity) external payable  {
+    function mintFromEmojiProtocol(
+        address to,
+        uint256 tokenId,
+        uint256 quantity,
+        address feeRecipient
+    ) external payable {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
         if (saleState == 0) revert SaleClosed();
         if (!_tokenIds.contains(tokenId)) revert InvalidTokenId();
-        uint256 totalPrice = FPML.fullMulDiv(quantity, tokenData[tokenId].price, 1);
+        uint256 totalPrice = FPML.fullMulDiv(
+            quantity,
+            tokenData[tokenId].price,
+            1
+        );
         uint256 spinFeeAmount = FPML.fullMulDiv(totalPrice, spinFee, 10000);
         if (msg.value < totalPrice) revert InsufficientPayment();
-        payable(emojiProtocolAddress).safeTransferETH(spinFeeAmount);
+        payable(feeRecipient).safeTransferETH(spinFeeAmount);
         _mint(to, tokenId, quantity, "");
         _ownerTokenIds[to].add(tokenId);
     }
@@ -97,27 +108,35 @@ contract Chip is ERC1155, Ownable {
     function setSaleState(uint8 value) external onlyOwner {
         saleState = value;
     }
-   
 
-    function createToken(uint256 tokenId, string memory tokenURI, uint96 price) external onlyOwner {
+    function createToken(
+        uint256 tokenId,
+        string memory tokenURI,
+        uint96 price
+    ) external onlyOwner {
         if (_tokenIds.contains(tokenId)) revert Exists();
-        address metadata = bytes(tokenURI).length > 0 ? SSTORE2.write(bytes(tokenURI)) : address(0);
+        address metadata = bytes(tokenURI).length > 0
+            ? SSTORE2.write(bytes(tokenURI))
+            : address(0);
 
-        tokenData[tokenId] = TokenData({
-            uri: metadata,
-            price: price
-        });
+        tokenData[tokenId] = TokenData({uri: metadata, price: price});
         _tokenIds.add(tokenId);
         emit TokenCreated(tokenId, price);
     }
 
-    function updateTokenURI(uint256 tokenId, string memory newTokenURI) external onlyOwner {
+    function updateTokenURI(
+        uint256 tokenId,
+        string memory newTokenURI
+    ) external onlyOwner {
         if (!_tokenIds.contains(tokenId)) revert DoesntExist();
         tokenData[tokenId].uri = SSTORE2.write(bytes(newTokenURI));
         emit TokenURIUpdated(tokenId, newTokenURI);
     }
 
-    function updateTokenPrice(uint256 tokenId, uint96 newPrice) external onlyOwner {
+    function updateTokenPrice(
+        uint256 tokenId,
+        uint96 newPrice
+    ) external onlyOwner {
         if (!_tokenIds.contains(tokenId)) revert DoesntExist();
         tokenData[tokenId].price = newPrice;
     }
@@ -125,7 +144,7 @@ contract Chip is ERC1155, Ownable {
     function getTokenIds() external view returns (uint256[] memory) {
         return _tokenIds.values();
     }
- function getspinFee() external view returns (uint16) {
+    function getspinFee() external view returns (uint16) {
         return spinFee;
     }
 
@@ -133,26 +152,24 @@ contract Chip is ERC1155, Ownable {
         return tokenData[tokenId].price;
     }
 
-   function setSpinFee(uint16 fee) external onlyOwner{
+    function setSpinFee(uint16 fee) external onlyOwner {
         spinFee = fee;
     }
 
+    function getOwnerTokens(address owner) external view returns (uint256) {
+        uint256[] memory tokens = _ownerTokenIds[owner].values();
 
+        if (tokens.length == 0) revert noTokens();
 
-function getOwnerTokens(address owner) external view returns (uint256) {
-    uint256[] memory tokens = _ownerTokenIds[owner].values();
-    
-    if(tokens.length == 0) revert noTokens();
-    
-    uint256 lowestTokenId = tokens[0];
-    for (uint256 i = 1; i < tokens.length; i++) { 
-        if (tokens[i] < lowestTokenId) {
-            lowestTokenId = tokens[i];
+        uint256 lowestTokenId = tokens[0];
+        for (uint256 i = 1; i < tokens.length; i++) {
+            if (tokens[i] < lowestTokenId) {
+                lowestTokenId = tokens[i];
+            }
         }
+
+        return lowestTokenId;
     }
-    
-    return lowestTokenId;
-}
 
     function withdraw(uint96 money) external {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
