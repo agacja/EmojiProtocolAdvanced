@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
-import "./Chip.sol";
 
+import { TokenData } from './ChipStructs.sol';
 library jajca {
-    function asReturnsUint256AndUint96(
-        function(address) internal view returns (uint256) fnIn
-    ) internal pure returns (function(address) internal view returns (uint256, uint96) fnOut) {
+    function asReturnsTokenData(
+        function(uint256) internal view returns (uint256) fnIn
+    ) internal pure returns (function(uint256) internal view returns (TokenData memory) fnOut) {
+        assembly {
+            fnOut := fnIn
+        }
+    }
+
+    function asReturnsPointers(
+        function(uint256) internal view returns (TokenData memory) fnIn
+    ) internal pure returns (function(uint256) internal view returns (uint256) fnOut) {
         assembly {
             fnOut := fnIn
         }

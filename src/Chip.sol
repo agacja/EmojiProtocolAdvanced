@@ -8,6 +8,7 @@ import {LibString} from "../lib/solady/src/utils/LibString.sol";
 import {FixedPointMathLib as FPML} from "../lib/solady/src/utils/FixedPointMathLib.sol";
 import {SSTORE2} from "../lib/solady/src/utils/SSTORE2.sol";
 import {EnumerableSetLib} from "../lib/solady/src/utils/EnumerableSetLib.sol";
+import "./jajca.sol";
 
 error SaleClosed();
 error InvalidTokenId();
@@ -23,11 +24,17 @@ contract Chip is ERC1155, Ownable {
     using EnumerableSetLib for EnumerableSetLib.Uint256Set;
     using SafeTransferLib for address payable;
     using LibString for uint256;
+   using jajca for function(uint256) internal view returns (uint256);
+    using jajca for function(uint256) internal view returns (TokenData memory);
 
-    struct TokenData {
-        address uri;
-        uint96 price;
-    }
+
+
+    TokenData internal _data;
+
+   // struct TokenData {
+    //    address uri;
+    //    uint96 price;
+   // }
 
     uint8 public saleState;
     uint16 public spinFee;
@@ -37,41 +44,50 @@ contract Chip is ERC1155, Ownable {
     address private _baseURI;
     address public emojiProtocolAddress;
 
-    mapping(uint256 => TokenData) public tokenData;
+    mapping(uint256 => TokenData) internal tokenData;
     mapping(address => EnumerableSetLib.Uint256Set) private _ownerTokenIds;
 
     event TokenCreated(uint256 indexed tokenId, uint96 price);
     event TokenURIUpdated(uint256 indexed tokenId, string newUri);
     event BaseURIUpdated(string newBaseURI);
-
+   // event TokenDataUpdated(uint256 indexed tokenId, bool, data.uri, data.price);
 
 
     constructor() ERC1155() {
         _initializeOwner(msg.sender);
     }
 
-    function uri(uint256 tokenId) public view override returns (string memory) {
-        if (!_tokenIds.contains(tokenId)) revert DoesntExist();
-        address tokenURI = tokenData[tokenId].uri;
-        if (tokenURI == address(0)) {
-            return string(abi.encodePacked(SSTORE2.read(_baseURI), tokenId.toString()));
-        } else {
-            return string(SSTORE2.read(tokenURI));
-        }
+   function uri(uint256 tokenId) public view override returns (string memory) {
+    if (!_tokenIds.contains(tokenId)) revert DoesntExist();
+    string memory tokenURI = tokenData[tokenId].uri;
+    if (bytes(tokenURI).length == 0) {
+        return string(abi.encodePacked(SSTORE2.read(_baseURI), tokenId.toString()));
+    } else {
+        return tokenURI;
     }
+}
 
     function setEmojiProtocolAddress(address _emojiProtocolAddress) external onlyOwner {
         emojiProtocolAddress = _emojiProtocolAddress;
     }
 
-    function mintFromEmojiProtocol(address to, uint256 tokenId, uint256 quantity) external payable  {
+       function mintFromEmojiProtocol(
+        address to,
+        uint256 tokenId,
+        uint256 quantity,
+        address feeRecipient
+    ) external payable {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
         if (saleState == 0) revert SaleClosed();
         if (!_tokenIds.contains(tokenId)) revert InvalidTokenId();
-        uint256 totalPrice = FPML.fullMulDiv(quantity, tokenData[tokenId].price, 1);
+        uint256 totalPrice = FPML.fullMulDiv(
+            quantity,
+            tokenData[tokenId].price,
+            1
+        );
         uint256 spinFeeAmount = FPML.fullMulDiv(totalPrice, spinFee, 10000);
         if (msg.value < totalPrice) revert InsufficientPayment();
-        payable(emojiProtocolAddress).safeTransferETH(spinFeeAmount);
+        payable(feeRecipient).safeTransferETH(spinFeeAmount);
         _mint(to, tokenId, quantity, "");
         _ownerTokenIds[to].add(tokenId);
     }
@@ -99,23 +115,69 @@ contract Chip is ERC1155, Ownable {
     }
    
 
-    function createToken(uint256 tokenId, string memory tokenURI, uint96 price) external onlyOwner {
-        if (_tokenIds.contains(tokenId)) revert Exists();
-        address metadata = bytes(tokenURI).length > 0 ? SSTORE2.write(bytes(tokenURI)) : address(0);
 
-        tokenData[tokenId] = TokenData({
-            uri: metadata,
-            price: price
-        });
-        _tokenIds.add(tokenId);
-        emit TokenCreated(tokenId, price);
+   // function createToken(uint256 tokenId, string memory tokenURI, uint96 price) external onlyOwner {
+   //     if (_tokenIds.contains(tokenId)) revert Exists();
+    //    address metadata = bytes(tokenURI).length > 0 ? SSTORE2.write(bytes(tokenURI)) : address(0);
+
+     //   tokenData[tokenId] = TokenData({
+      //      uri: metadata,
+      //      price: price
+      //  });
+      //  _tokenIds.add(tokenId);
+     //   emit TokenCreated(tokenId, price);
+   // }
+
+
+  //  function createToken(uint256 tokenId, string memory tokenURI, uint96 price) external onlyOwner {
+  //  if (_tokenIds.contains(tokenId)) revert Exists();
+
+  //  TokenData memory newTokenData = TokenData({
+  //      uri: tokenURI,
+  //      isOpen: true,
+  //      price: price
+ //   });
+
+ //   _writeState(newTokenData);
+
+  //  _tokenIds.add(tokenId);
+
+  //  tokenData[tokenId] = _data;
+
+  //  emit TokenCreated(tokenId, price);
+//}
+
+function createToken(uint256 tokenId, string memory urio, uint96 price) external onlyOwner {
+    if (_tokenIds.contains(tokenId)) revert Exists();
+    address uriAddress;
+    if (bytes(urio).length > 0) {
+        uriAddress = SSTORE2.write(bytes(urio));
     }
 
-    function updateTokenURI(uint256 tokenId, string memory newTokenURI) external onlyOwner {
-        if (!_tokenIds.contains(tokenId)) revert DoesntExist();
-        tokenData[tokenId].uri = SSTORE2.write(bytes(newTokenURI));
-        emit TokenURIUpdated(tokenId, newTokenURI);
+    assembly {
+        // Calculate the storage slot for this tokenId in the mapping
+        mstore(0x00, tokenId)
+        mstore(0x20, tokenData.slot)
+        let baseSlot := keccak256(0x00, 0x40)
+
+        // Slot 0 Storage Layout:
+        // [0:96] | price (96 bits)
+        // [96:255] | uriAddress (160 bits for address of SSTORE2 pointer)
+        // [255:256] | isOpen (1 bit)
+        let slot0 := or(
+            or(price, shl(96, uriAddress)),
+            shl(255, 1) // isOpen is always true when creating
+        )
+        sstore(baseSlot, slot0)
     }
+    _tokenIds.add(tokenId);
+      emit TokenCreated(tokenId, price);
+}
+    //function updateTokenURI(uint256 tokenId, string memory newTokenURI) external onlyOwner {
+    // //   if (!_tokenIds.contains(tokenId)) revert DoesntExist();
+    //    tokenData[tokenId].uri = SSTORE2.write(bytes(newTokenURI));
+     //   emit TokenURIUpdated(tokenId, newTokenURI);
+  //  }
 
     function updateTokenPrice(uint256 tokenId, uint96 newPrice) external onlyOwner {
         if (!_tokenIds.contains(tokenId)) revert DoesntExist();
@@ -135,12 +197,27 @@ contract Chip is ERC1155, Ownable {
 
    function setSpinFee(uint16 fee) external onlyOwner{
         spinFee = fee;
+
+
+    }
+ 
+
+
+    function _calculateCurrentDataPointers(uint256 tokenId) internal view returns (uint256 data) {
+        data = _calculateCurrentData.asReturnsPointers()(tokenId);
+    }
+
+    function Price(uint256 tokenId) external view returns (uint256) {
+        return _calculateCurrentDataPointers.asReturnsTokenData()(tokenId).price;
+    }
+
+    function _calculateCurrentData(uint256 tokenId) internal view returns (TokenData memory) {
+        return tokenData[tokenId];
     }
 
 
-
 function getOwnerTokens(address owner) external view returns (uint256) {
-    uint256[] memory tokens = _ownerTokenIds[owner].values();
+   uint256[] memory tokens = _ownerTokenIds[owner].values();
     
     if(tokens.length == 0) revert noTokens();
     
@@ -153,6 +230,39 @@ function getOwnerTokens(address owner) external view returns (uint256) {
     
     return lowestTokenId;
 }
+
+//function getLowestTokenPriceForOwner(address owner) external view returns (uint256 lowestTokenId, uint256 price) {
+//    uint256[] memory tokens = _ownerTokenIds[owner].values();
+    
+ //  if(tokens.length == 0) revert noTokens();
+    
+ //   lowestTokenId = tokens[0];
+ //   for (uint256 i = 1; i < tokens.length; i++) { 
+  //      if (tokens[i] < lowestTokenId) {
+   //         lowestTokenId = tokens[i];
+   //     }
+   // }
+  //  
+ //   price = this.Price(lowestTokenId);
+//}
+
+ function getLowestTokenPriceForOwner(address owner) external view returns (uint256 lowestTokenId, uint256 price) {
+        uint256[] memory tokens = _ownerTokenIds[owner].values();
+        
+        if(tokens.length == 0) revert noTokens();
+        
+        lowestTokenId = tokens[0];
+        for (uint256 i = 1; i < tokens.length; i++) { 
+            if (tokens[i] < lowestTokenId) {
+                lowestTokenId = tokens[i];
+            }
+        }
+        
+        // Use the existing Price function to get the price
+        price = this.Price(lowestTokenId);
+    }
+
+
 
     function withdraw(uint96 money) external {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
