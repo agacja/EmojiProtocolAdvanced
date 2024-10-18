@@ -9,7 +9,7 @@ import {SafeTransferLib} from "../lib/solady/src/utils/SafeTransferLib.sol";
 import "@pythnetwork/entropy-sdk-solidity/IEntropy.sol";
 import "@pythnetwork/entropy-sdk-solidity/IEntropyConsumer.sol";
 import {EIP712} from "../lib/solady/src/utils/EIP712.sol";
-import "./jajca.sol";
+
 
 
 error NotEthereum();
@@ -59,7 +59,6 @@ interface IChip {
     function balanceOf(address account, uint256 id) external view returns (uint256);
     function withdraw(uint96 money) external;
     function getOwnerTokens(address owner) external view returns (uint256);
-    function getTokenData(uint256 tokenId) external view returns (TokenData memory);
     function getLowestTokenPriceForOwner(address owner) external view returns (uint256 lowestTokenId, uint96 price);
     function getspinFee() external view returns (uint16);
    
@@ -68,10 +67,7 @@ interface IChip {
 
 contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     using ECDSA for bytes32;
-   // using jajca for function() internal view returns (uint256);
-   // using jajca for function() internal view returns (TokenData memory);
-     using jajca for *;
-    TokenData internal _data;
+
 
     
     ICrossDomainMessenger public MESSENGER;
