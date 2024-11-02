@@ -1,14 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {ERC1155} from "../lib/solady/src/tokens/ERC1155.sol";
-import {Ownable} from "../lib/solady/src/auth/Ownable.sol";
-import {SafeTransferLib} from "../lib/solady/src/utils/SafeTransferLib.sol";
-import {LibString} from "../lib/solady/src/utils/LibString.sol";
-import {FixedPointMathLib as FPML} from "../lib/solady/src/utils/FixedPointMathLib.sol";
-import {SSTORE2} from "../lib/solady/src/utils/SSTORE2.sol";
-import {EnumerableSetLib} from "../lib/solady/src/utils/EnumerableSetLib.sol";
-import "./jajca.sol";
 
 error SaleClosed();
 error InvalidTokenId();
@@ -19,59 +11,66 @@ error Exists();
 error DoesntExist();
 error noTokens();
 
+import {ERC1155} from "../lib/solady/src/tokens/ERC1155.sol";
+import {Ownable} from "../lib/solady/src/auth/Ownable.sol";
+import {SafeTransferLib} from "../lib/solady/src/utils/SafeTransferLib.sol";
+import {LibString} from "../lib/solady/src/utils/LibString.sol";
+import {FixedPointMathLib as FPML} from "../lib/solady/src/utils/FixedPointMathLib.sol";
+import {SSTORE2} from "../lib/solady/src/utils/SSTORE2.sol";
+import {EnumerableSetLib} from "../lib/solady/src/utils/EnumerableSetLib.sol";
+import "./jajca.sol";
+
 
 contract Chip is ERC1155, Ownable {
+
+    // ============ Library Usage ============
     using EnumerableSetLib for EnumerableSetLib.Uint256Set;
     using SafeTransferLib for address payable;
     using LibString for uint256;
-   using jajca for function(uint256) internal view returns (uint256);
+    using jajca for function(uint256) internal view returns (uint256);
     using jajca for function(uint256) internal view returns (TokenData memory);
 
-
-
+    // ============ State Variables ============
     TokenData internal _data;
-
-   // struct TokenData {
-    //    address uri;
-    //    uint96 price;
-   // }
-
     uint8 public saleState;
     uint16 public spinFee;
     bool public baseURILocked;
     EnumerableSetLib.Uint256Set private _tokenIds;
-
     address private _baseURI;
     address public emojiProtocolAddress;
 
+    // ============ Mappings ============
     mapping(uint256 => TokenData) internal tokenData;
     mapping(address => EnumerableSetLib.Uint256Set) private _ownerTokenIds;
 
+    // ============ Events ============
     event TokenCreated(uint256 indexed tokenId, uint96 price);
     event TokenURIUpdated(uint256 indexed tokenId, string newUri);
     event BaseURIUpdated(string newBaseURI);
-   // event TokenDataUpdated(uint256 indexed tokenId, bool, data.uri, data.price);
 
-
+    // ============ Constructor ============
     constructor() ERC1155() {
         _initializeOwner(msg.sender);
     }
 
-   function uri(uint256 tokenId) public view override returns (string memory) {
-    if (!_tokenIds.contains(tokenId)) revert DoesntExist();
-    string memory tokenURI = tokenData[tokenId].uri;
-    if (bytes(tokenURI).length == 0) {
-        return string(abi.encodePacked(SSTORE2.read(_baseURI), tokenId.toString()));
-    } else {
-        return tokenURI;
+    // ============ URI Functions ============
+    function uri(uint256 tokenId) public view override returns (string memory) {
+        if (!_tokenIds.contains(tokenId)) revert DoesntExist();
+        string memory tokenURI = tokenData[tokenId].uri;
+        if (bytes(tokenURI).length == 0) {
+            return string(abi.encodePacked(SSTORE2.read(_baseURI), tokenId.toString()));
+        } else {
+            return tokenURI;
+        }
     }
-}
 
+    // ============ Admin Functions ============
     function setEmojiProtocolAddress(address _emojiProtocolAddress) external onlyOwner {
         emojiProtocolAddress = _emojiProtocolAddress;
     }
 
-       function mintFromEmojiProtocol(
+    // ============ Minting Functions ============
+    function mintFromEmojiProtocol(
         address to,
         uint256 tokenId,
         uint256 quantity,
@@ -92,6 +91,7 @@ contract Chip is ERC1155, Ownable {
         _ownerTokenIds[to].add(tokenId);
     }
 
+    // ============ Burn Functions ============
     function burn(address from, uint256 tokenId, uint256 quantity) external {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
         _burn(from, tokenId, quantity);
@@ -100,6 +100,7 @@ contract Chip is ERC1155, Ownable {
         }
     }
 
+    // ============ URI Management Functions ============
     function setBaseURI(string calldata newBaseURI) external onlyOwner {
         if (baseURILocked) revert BaseURILocked();
         _baseURI = SSTORE2.write(bytes(newBaseURI));
@@ -110,84 +111,50 @@ contract Chip is ERC1155, Ownable {
         baseURILocked = true;
     }
 
+    // ============ Sale Management Functions ============
     function setSaleState(uint8 value) external onlyOwner {
         saleState = value;
     }
-   
 
+    // ============ Token Management Functions ============
+    function createToken(uint256 tokenId, string memory urio, uint96 price) external onlyOwner {
+        if (_tokenIds.contains(tokenId)) revert Exists();
+        address uriAddress;
+        if (bytes(urio).length > 0) {
+            uriAddress = SSTORE2.write(bytes(urio));
+        }
 
-   // function createToken(uint256 tokenId, string memory tokenURI, uint96 price) external onlyOwner {
-   //     if (_tokenIds.contains(tokenId)) revert Exists();
-    //    address metadata = bytes(tokenURI).length > 0 ? SSTORE2.write(bytes(tokenURI)) : address(0);
+        assembly {
+            // Calculate the storage slot for this tokenId in the mapping
+            mstore(0x00, tokenId)
+            mstore(0x20, tokenData.slot)
+            let baseSlot := keccak256(0x00, 0x40)
 
-     //   tokenData[tokenId] = TokenData({
-      //      uri: metadata,
-      //      price: price
-      //  });
-      //  _tokenIds.add(tokenId);
-     //   emit TokenCreated(tokenId, price);
-   // }
-
-
-  //  function createToken(uint256 tokenId, string memory tokenURI, uint96 price) external onlyOwner {
-  //  if (_tokenIds.contains(tokenId)) revert Exists();
-
-  //  TokenData memory newTokenData = TokenData({
-  //      uri: tokenURI,
-  //      isOpen: true,
-  //      price: price
- //   });
-
- //   _writeState(newTokenData);
-
-  //  _tokenIds.add(tokenId);
-
-  //  tokenData[tokenId] = _data;
-
-  //  emit TokenCreated(tokenId, price);
-//}
-
-function createToken(uint256 tokenId, string memory urio, uint96 price) external onlyOwner {
-    if (_tokenIds.contains(tokenId)) revert Exists();
-    address uriAddress;
-    if (bytes(urio).length > 0) {
-        uriAddress = SSTORE2.write(bytes(urio));
+            // Slot 0 Storage Layout:
+            // [0:96] | price (96 bits)
+            // [96:255] | uriAddress (160 bits for address of SSTORE2 pointer)
+            // [255:256] | isOpen (1 bit)
+            let slot0 := or(
+                or(price, shl(96, uriAddress)),
+                shl(255, 1) // isOpen is always true when creating
+            )
+            sstore(baseSlot, slot0)
+        }
+        _tokenIds.add(tokenId);
+        emit TokenCreated(tokenId, price);
     }
-
-    assembly {
-        // Calculate the storage slot for this tokenId in the mapping
-        mstore(0x00, tokenId)
-        mstore(0x20, tokenData.slot)
-        let baseSlot := keccak256(0x00, 0x40)
-
-        // Slot 0 Storage Layout:
-        // [0:96] | price (96 bits)
-        // [96:255] | uriAddress (160 bits for address of SSTORE2 pointer)
-        // [255:256] | isOpen (1 bit)
-        let slot0 := or(
-            or(price, shl(96, uriAddress)),
-            shl(255, 1) // isOpen is always true when creating
-        )
-        sstore(baseSlot, slot0)
-    }
-    _tokenIds.add(tokenId);
-      emit TokenCreated(tokenId, price);
-}
-    //function updateTokenURI(uint256 tokenId, string memory newTokenURI) external onlyOwner {
-    // //   if (!_tokenIds.contains(tokenId)) revert DoesntExist();
-    //    tokenData[tokenId].uri = SSTORE2.write(bytes(newTokenURI));
-     //   emit TokenURIUpdated(tokenId, newTokenURI);
-  //  }
 
     function updateTokenPrice(uint256 tokenId, uint96 newPrice) external onlyOwner {
         if (!_tokenIds.contains(tokenId)) revert DoesntExist();
         tokenData[tokenId].price = newPrice;
     }
 
+    // ============ View Functions ============
     function getTokenIds() external view returns (uint256[] memory) {
         return _tokenIds.values();
     }
- function getspinFee() external view returns (uint16) {
+
+    function getspinFee() external view returns (uint16) {
         return spinFee;
     }
 
@@ -195,14 +162,12 @@ function createToken(uint256 tokenId, string memory urio, uint96 price) external
         return tokenData[tokenId].price;
     }
 
-   function setSpinFee(uint16 fee) external onlyOwner{
+    // ============ Fee Management Functions ============
+    function setSpinFee(uint16 fee) external onlyOwner {
         spinFee = fee;
-
-
     }
- 
 
-
+    // ============ Internal Data Functions ============
     function _calculateCurrentDataPointers(uint256 tokenId) internal view returns (uint256 data) {
         data = _calculateCurrentData.asReturnsPointers()(tokenId);
     }
@@ -215,38 +180,23 @@ function createToken(uint256 tokenId, string memory urio, uint96 price) external
         return tokenData[tokenId];
     }
 
-
-function getOwnerTokens(address owner) external view returns (uint256) {
-   uint256[] memory tokens = _ownerTokenIds[owner].values();
-    
-    if(tokens.length == 0) revert noTokens();
-    
-    uint256 lowestTokenId = tokens[0];
-    for (uint256 i = 1; i < tokens.length; i++) { 
-        if (tokens[i] < lowestTokenId) {
-            lowestTokenId = tokens[i];
+    // ============ Owner Token Functions ============
+    function getOwnerTokens(address owner) external view returns (uint256) {
+        uint256[] memory tokens = _ownerTokenIds[owner].values();
+        
+        if(tokens.length == 0) revert noTokens();
+        
+        uint256 lowestTokenId = tokens[0];
+        for (uint256 i = 1; i < tokens.length; i++) { 
+            if (tokens[i] < lowestTokenId) {
+                lowestTokenId = tokens[i];
+            }
         }
+        
+        return lowestTokenId;
     }
-    
-    return lowestTokenId;
-}
 
-//function getLowestTokenPriceForOwner(address owner) external view returns (uint256 lowestTokenId, uint256 price) {
-//    uint256[] memory tokens = _ownerTokenIds[owner].values();
-    
- //  if(tokens.length == 0) revert noTokens();
-    
- //   lowestTokenId = tokens[0];
- //   for (uint256 i = 1; i < tokens.length; i++) { 
-  //      if (tokens[i] < lowestTokenId) {
-   //         lowestTokenId = tokens[i];
-   //     }
-   // }
-  //  
- //   price = this.Price(lowestTokenId);
-//}
-
- function getLowestTokenPriceForOwner(address owner) external view returns (uint256 lowestTokenId, uint256 price) {
+    function getLowestTokenPriceForOwner(address owner) external view returns (uint256 lowestTokenId, uint256 price) {
         uint256[] memory tokens = _ownerTokenIds[owner].values();
         
         if(tokens.length == 0) revert noTokens();
@@ -258,12 +208,10 @@ function getOwnerTokens(address owner) external view returns (uint256) {
             }
         }
         
-        // Use the existing Price function to get the price
         price = this.Price(lowestTokenId);
     }
 
-
-
+    // ============ Withdrawal Functions ============
     function withdraw(uint96 money) external {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
         SafeTransferLib.safeTransferETH(payable(emojiProtocolAddress), money);

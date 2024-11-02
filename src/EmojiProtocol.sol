@@ -1,17 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Ownable} from "../lib/solady/src/auth/Ownable.sol";
-import {ECDSA} from "../lib/solady/src/utils/ECDSA.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {FixedPointMathLib as FPML} from "../lib/solady/src/utils/FixedPointMathLib.sol";
-import {SafeTransferLib} from "../lib/solady/src/utils/SafeTransferLib.sol";
-import "@pythnetwork/entropy-sdk-solidity/IEntropy.sol";
-import "@pythnetwork/entropy-sdk-solidity/IEntropyConsumer.sol";
-import {EIP712} from "../lib/solady/src/utils/EIP712.sol";
-
-
-
 error NotEthereum();
 error NoMoney();
 error InsufficientFee();
@@ -23,6 +12,18 @@ error dupa();
 error TokenNotFound();
 error UserNotRegisteredOrInsufficientPayment();
 
+
+import {Ownable} from "../lib/solady/src/auth/Ownable.sol";
+import {ECDSA} from "../lib/solady/src/utils/ECDSA.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {FixedPointMathLib as FPML} from "../lib/solady/src/utils/FixedPointMathLib.sol";
+import {SafeTransferLib} from "../lib/solady/src/utils/SafeTransferLib.sol";
+import "@pythnetwork/entropy-sdk-solidity/IEntropy.sol";
+import "@pythnetwork/entropy-sdk-solidity/IEntropyConsumer.sol";
+import {EIP712} from "../lib/solady/src/utils/EIP712.sol";
+import "./Interfaces/IChip.sol";
+
+// ============ External Interfaces ============
 interface ISwapRouter {
     struct ExactInputSingleParams {
         address tokenIn;
@@ -48,46 +49,28 @@ interface IWETH {
     function approve(address, uint256) external returns (bool);
 }
 
-interface IChip {
-    function mintFromEmojiProtocol(
-        address to,
-        uint256 quantity,
-        uint256 tokenId,
-        address feeRecipient
-    ) external payable;
-    function burn(address from, uint256 tokenId, uint256 quantity) external;
-    function balanceOf(address account, uint256 id) external view returns (uint256);
-    function withdraw(uint96 money) external;
-    function getOwnerTokens(address owner) external view returns (uint256);
-    function getLowestTokenPriceForOwner(address owner) external view returns (uint256 lowestTokenId, uint96 price);
-    function getspinFee() external view returns (uint16);
-   
-  }
-
 
 contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
     using ECDSA for bytes32;
 
-
-    
+    // ============ State Variables ============
     ICrossDomainMessenger public MESSENGER;
     uint32 public bridgeGasLimit = 2000000;
     address public signer;
-
-
     ISwapRouter public swapRouter;
     IWETH public WETH;
-    
     address[] public specialTokens;
-
     IEntropy private entropy;
     address private entropyProvider;
 
+    // ============ Events ============
     event SpinRequest(uint64 sequenceNumber, address spinner);
     event SpinResult(uint64 sequenceNumber, uint8 slot1, uint8 slot2, uint8 slot3);
 
+    // ============ Constants and Storage ============
     bytes32 private constant REGISTER_TYPEHASH = 
         keccak256("Info(string telegramId,address walletAddress)");
+    
     mapping(uint64 => address) public spinToSpinner;
     mapping(address => uint24) public specialTokentoFee;
     mapping(address => string) public registeredUsers;
@@ -97,8 +80,10 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         string telegramId;
         address walletAddress;
     }
+    
     IChip public chip;
 
+    // ============ Constructor ============
     constructor(address _entropy, address _entropyProvider) {
         _initializeOwner(0x644C1564d1d19Cf336417734170F21B944109074);
         MESSENGER = ICrossDomainMessenger(0x866E82a600A1414e583f7F13623F1aC5d58b0Afa);
@@ -106,6 +91,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         entropyProvider = _entropyProvider;
     }
 
+    // ============ EIP712 Implementation ============
     function _domainNameAndVersion() internal pure override returns (string memory name, string memory version) {
         name = "EmojiProtocol";
         version = "1";
@@ -115,6 +101,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         return false;
     }
 
+    // ============ Modifiers ============
     modifier requireSignature(bytes calldata signature) {
         require(
             keccak256(abi.encode(msg.sender)).toEthSignedMessageHash().recover(signature) == signer,
@@ -123,6 +110,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         _;
     }
 
+    // ============ Admin Functions ============
     function initialize(address _swapRouter, address _weth) external onlyOwner {
         swapRouter = ISwapRouter(_swapRouter);
         WETH = IWETH(_weth);
@@ -136,6 +124,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         bridgeGasLimit = _newGasLimit;
     }
 
+    // ============ Bridge Functions ============
     function bridgeAndSwapFromEthereum() public payable {
         if (block.chainid != 1) revert NotEthereum();
         MESSENGER.sendMessage{value: msg.value}(
@@ -151,6 +140,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         _wrapAndSwap(recipient, amountIn);
     }
 
+    // ============ Internal Functions ============
     function _wrapAndSwap(address recipient, uint256 amountIn) internal {
         WETH.deposit{value: amountIn}();
         SafeTransferLib.safeApprove(address(WETH), address(swapRouter), amountIn);
@@ -175,6 +165,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         }
     }
 
+    // ============ User Functions ============
     function register(Info calldata info, bytes calldata signature) external {
         if (info.walletAddress != msg.sender) revert dupa();
         bytes32 structHash = keccak256(abi.encode(
@@ -184,16 +175,15 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         ));
 
         bytes32 hash = _hashTypedData(structHash);
-
         address recoveredSigner = ECDSA.recover(hash, signature);
-
         if (recoveredSigner != signer) revert fuck();
 
         registeredUsers[info.walletAddress] = info.telegramId;
         userAddresses[info.telegramId] = info.walletAddress;
     }
 
-      function buySpins(uint256 amount, uint256 tokenId) external payable {
+    // ============ Game Functions ============
+    function buySpins(uint256 amount, uint256 tokenId) external payable {
         if (bytes(registeredUsers[msg.sender]).length == 0) {
             revert UserNotRegisteredOrInsufficientPayment();
         }
@@ -205,10 +195,7 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         );
     }
 
-     function requestSpin(
-        bytes32 userRandomNumber,
-        string calldata telegramId
-    ) external payable onlyOwner {
+    function requestSpin(bytes32 userRandomNumber, string calldata telegramId) external payable onlyOwner {
         address spinner = userAddresses[telegramId];
 
         if (spinner == address(0)) revert InvalidTelegramId();
@@ -227,31 +214,26 @@ contract EmojiProtocol is Ownable, IEntropyConsumer, EIP712 {
         spinToSpinner[sequenceNumber] = spinner;
     }
 
-
+    // ============ View Functions ============
     function getSpinFee() public view returns (uint256) {
         return entropy.getFee(entropyProvider);
     }
 
- 
-
-function entropyCallback(
-        uint64 sequenceNumber,
-        address,
-        bytes32 randomNumber
-    ) internal override {
+    // ============ Oracle Functions ============
+    function entropyCallback(uint64 sequenceNumber, address, bytes32 randomNumber) internal override {
         uint256 randomValue = uint256(randomNumber);
         uint8 slot1 = uint8(randomValue % 10);
         uint8 slot2 = uint8((randomValue >> 8) % 10);
         uint8 slot3 = uint8((randomValue >> 16) % 10);
 
-    address spinner = spinToSpinner[sequenceNumber];
-    (uint256 lowestTokenId, uint96 money) = chip.getLowestTokenPriceForOwner(spinner);
-    uint96 total = money - uint96(FPML.fullMulDiv(money, chip.getspinFee(), 10000));
+        address spinner = spinToSpinner[sequenceNumber];
+        (uint256 lowestTokenId, uint96 money) = chip.getLowestTokenPriceForOwner(spinner);
+        uint96 total = money - uint96(FPML.fullMulDiv(money, chip.getspinFee(), 10000));
 
-    chip.burn(spinner, lowestTokenId, 1);
-    chip.withdraw(total);
+        chip.burn(spinner, lowestTokenId, 1);
+        chip.withdraw(total);
 
-     if (slot1 == slot2 && slot2 == slot3) {
+        if (slot1 == slot2 && slot2 == slot3) {
             if (slot1 == 0) {
                 _processWin(spinner, 10000); // Hugo win (100% of pool)
             } else if (slot1 >= 1 && slot1 <= 4) {
@@ -265,6 +247,7 @@ function entropyCallback(
 
         emit SpinResult(sequenceNumber, slot1, slot2, slot3);
     }
+
     function _processWin(address recipient, uint256 winPercentage) internal {
         uint256 length = specialTokens.length;
 
@@ -273,7 +256,6 @@ function entropyCallback(
             uint256 balance = IERC20(token).balanceOf(address(this));
 
             uint256 winAmount = FPML.fullMulDiv(balance, winPercentage, 10000);
-
             uint256 feeAmount = FPML.fullMulDiv(winAmount, 500, 10000); // 5% fee
             uint256 recipientAmount = winAmount - feeAmount;
 
@@ -294,10 +276,8 @@ function entropyCallback(
         return address(entropy);
     }
 
-    function addSpecialTokens(
-        address speciality,
-        uint24 fee
-    ) external payable onlyOwner {
+    // ============ Token Management Functions ============
+    function addSpecialTokens(address speciality, uint24 fee) external payable onlyOwner {
         uint256 length = specialTokens.length;
         for (uint256 i; i < length; ) {
             if (specialTokens[i] == speciality) revert TokenAlreadySpecial();
@@ -309,15 +289,12 @@ function entropyCallback(
         specialTokentoFee[speciality] = fee;
     }
 
-    function removeSpecialTokens(
-        address speciality
-    ) external payable onlyOwner {
+    function removeSpecialTokens(address speciality) external payable onlyOwner {
         uint256 length = specialTokens.length;
         for (uint256 i; i < length; i++) {
             if (specialTokens[i] == speciality) {
                 specialTokens[i] = specialTokens[length - 1];
                 specialTokens.pop();
-
                 delete specialTokentoFee[speciality];
                 return;
             }
@@ -329,6 +306,7 @@ function entropyCallback(
         signer = value;
     }
 
+    // ============ Receive Function ============
     receive() external payable {
         if (block.chainid == 1) {
             bridgeAndSwapFromEthereum();
