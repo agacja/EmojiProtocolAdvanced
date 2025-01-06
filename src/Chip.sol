@@ -79,6 +79,7 @@ contract Chip is ERC1155, Ownable {
         if (msg.sender != emojiProtocolAddress) revert NotAllowed();
         if (saleState == 0) revert SaleClosed();
         if (!_tokenIds.contains(tokenId)) revert InvalidTokenId();
+      
         uint256 totalPrice = FPML.fullMulDiv(
             quantity,
             tokenData[tokenId].price,
@@ -87,8 +88,39 @@ contract Chip is ERC1155, Ownable {
         uint256 spinFeeAmount = FPML.fullMulDiv(totalPrice, spinFee, 10000);
         if (msg.value < totalPrice) revert InsufficientPayment();
         payable(feeRecipient).safeTransferETH(spinFeeAmount);
-        _mint(to, tokenId, quantity, "");
-        _ownerTokenIds[to].add(tokenId);
+
+        //assembly 
+        assembly{
+            mstore(0x00, 0x731133e9)
+            mstore(0x04,to)
+            mstore(0x24,tokenId)
+            mstore(0x44, quantity)
+               // Execute the transfer and mint
+                if iszero(call(gas(), chip, 0, 0x00, 0x64, 0, 0)) { revert(0, 0) }
+            }
+    }
+        //_mint(to, tokenId, quantity, "");
+    mstore(0x00, to)
+    mstore(0x20, _ownerTokenIds.slot)
+   let setSlot := keccak256(0x00, 0x40)
+
+ 
+   let length := sload(setSlot)
+
+   // Store value in array
+   mstore(0x00, setSlot)
+   let arrayLocation := keccak256(0x00, 0x40)
+   sstore(add(arrayLocation, length), tokenId)
+
+   // Update positions mapping
+   mstore(0x00, tokenId)
+   mstore(0x20, add(setSlot, 1))
+   sstore(keccak256(0x00, 0x40), add(length, 1))
+
+   // Update length
+   sstore(setSlot, add(length, 1))
+}
+       // _ownerTokenIds[to].add(tokenId);
     }
 
     // ============ Burn Functions ============
